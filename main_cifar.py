@@ -17,13 +17,13 @@ from CIFAR.data_helper_cifar import prepare_data
 parser = argparse.ArgumentParser(description='EMLC Training Framework')
 
 # General and paths
-parser.add_argument('--dataset', type=str, choices=['cifar10', 'cifar100']) # Required
+parser.add_argument('--dataset', type=str, choices=['cifar10', 'cifar100'], required=True) 
 parser.add_argument('--seed', type=int, default=0)
 parser.add_argument('--data_seed', type=int, default=0)
-parser.add_argument('--runid', default='clothing1m_run_best', type=str)
+parser.add_argument('--runid', default=0, type=int)
 parser.add_argument('--data_path', default='data/', type=str, help='Root for the datasets.')
 parser.add_argument('--logdir', type=str, default='runs', help='Log folder.')
-parser.add_argument('--ssl_path', type=str, help='SSL pretrained model path.') # Required
+parser.add_argument('--ssl_path', type=str, help='SSL pretrained model path.')
 
 # Training
 parser.add_argument('--epochs', '-e', type=int, default=15, help='Number of epochs to train.')
@@ -74,8 +74,8 @@ def set_logging(rank):
 def build_models(rank, dataset, num_classes):
     args.embedding_dim = 512 if dataset == 'cifar10' else 2048
     model_fn = generalized_resnet34 if dataset == 'cifar10' else generalized_resnet50
-    main_net = model_fn(num_classes, args, ssl=True)
-    meta_backbone = model_fn(num_classes, args, ssl=True)
+    main_net = model_fn(num_classes, args, ssl=args.ssl_path is not None)
+    meta_backbone = model_fn(num_classes, args, ssl=args.ssl_path is not None)
 
     meta_net = ResNetFeatures(meta_backbone)
     enhancer = TeacherEnhancer(num_classes, args.embedding_dim, args.label_embedding_dim, args.mlp_hidden_dim)
