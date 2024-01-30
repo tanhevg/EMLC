@@ -1,3 +1,5 @@
+# To run on Mac:
+# PYTORCH_ENABLE_MPS_FALLBACK=1 python main_cifar.py --device mps --jvp_ad_method double-back-trick --dataset cifar10 --data_path ~/data/cifar/ --corruption_type flip --corruption_level 0.6 --runid 0 --gradient_steps 5
 import pickle
 import argparse
 import os
@@ -17,6 +19,12 @@ from CIFAR.data_helper_cifar import prepare_data
 parser = argparse.ArgumentParser(description='EMLC Training Framework')
 
 # General and paths
+parser.add_argument('--jvp_ad_method', type=str, default='forward', choices=['forward', 'reverse', 'double-back-trick'])
+parser.add_argument('--device', type=str, help="""
+    Device to run on. If not set, we will assume a DDP setting, and figure out the devise based on rank.
+    If set, rank will not be used, and DDP workers will not be spawned.
+                    
+""")
 parser.add_argument('--dataset', type=str, choices=['cifar10', 'cifar100'], required=True) 
 parser.add_argument('--seed', type=int, default=0)
 parser.add_argument('--data_seed', type=int, default=0)
@@ -71,7 +79,10 @@ def set_logging(rank):
 
 # //////////////////////// defining model ////////////////////////
 
-def build_models(rank, dataset, num_classes):
+def build_models(rank, device, dataset, num_classes):
+    ddp = device is None
+    if ddp:
+        device = rank
     args.embedding_dim = 512 if dataset == 'cifar10' else 2048
     model_fn = generalized_resnet34 if dataset == 'cifar10' else generalized_resnet50
     main_net = model_fn(num_classes, args, ssl=args.ssl_path is not None)
@@ -80,20 +91,21 @@ def build_models(rank, dataset, num_classes):
     meta_net = ResNetFeatures(meta_backbone)
     enhancer = TeacherEnhancer(num_classes, args.embedding_dim, args.label_embedding_dim, args.mlp_hidden_dim)
 
-    main_net = main_net.to(rank)
-    main_net = DDP(main_net, device_ids=[rank])
+    main_net = main_net.to(device)
+    meta_net = meta_net.to(device)
+    enhancer = enhancer.to(device)
 
-    meta_net = meta_net.to(rank)
-    meta_net = DDP(meta_net, device_ids=[rank])
-
-    enhancer = enhancer.to(rank)
-    enhancer = DDP(enhancer, device_ids=[rank])
+    if ddp:
+        main_net = DDP(main_net, device_ids=[rank])
+        meta_net = DDP(meta_net, device_ids=[rank])
+        enhancer = DDP(enhancer, device_ids=[rank])
     
     return main_net, meta_net, enhancer
 
 # //////////////////////// run experiments ////////////////////////
 def run(rank):
-    ddp_setup(rank, world_size=args.n_gpus, runid=args.runid)
+    if args.device is None:
+        ddp_setup(rank, world_size=args.n_gpus, runid=args.runid)
     logger = set_logging(rank)
     np.random.seed(args.seed)
     random.seed(args.seed)
@@ -108,7 +120,7 @@ def run(rank):
     assert args.corruption_level >= 0 and args.corruption_level <=1, 'Wrong noise level!'
 
     gold_loader, silver_loader, valid_loader, test_loader, num_classes = prepare_data(args.gold_fraction, args.corruption_level, args)
-    main_net, meta_net, enhacner = build_models(rank, args.dataset, num_classes)
+    main_net, meta_net, enhacner = build_models(rank, args.device, args.dataset, num_classes)
 
     trainer = Trainer(rank, args, main_net, meta_net, enhacner,
                     gold_loader, silver_loader, valid_loader, test_loader,
@@ -129,6 +141,9 @@ def run(rank):
     destroy_process_group()
 
 if __name__ == "__main__":
-    gpus = range(args.gpuid, args.gpuid+args.n_gpus)
-    os.environ["CUDA_VISIBLE_DEVICES"] = ','.join(str(x) for x in gpus)
-    mp.spawn(run, nprocs=args.n_gpus)
+    if args.device is None:
+        gpus = range(args.gpuid, args.gpuid+args.n_gpus)
+        os.environ["CUDA_VISIBLE_DEVICES"] = ','.join(str(x) for x in gpus)
+        mp.spawn(run, nprocs=args.n_gpus)
+    else:
+        run(0)

@@ -62,17 +62,17 @@ def prepare_data(gold_fraction, corruption_prob, args):
             root=args.data_path, train=True, meta=True, num_meta=args.num_meta, corruption_prob=corruption_prob,
             corruption_type=args.corruption_type, transform=test_transform, download=True)    
     
-    gold_sampler = DistributedSampler(dataset=train_data_gold, shuffle=True)
-    silver_sampler = DistributedSampler(dataset=train_data_silver, shuffle=True)
+    gold_sampler = DistributedSampler(dataset=train_data_gold, shuffle=True) if args.device is None else None
+    silver_sampler = DistributedSampler(dataset=train_data_silver, shuffle=True) if args.device is None else None
     val_sampler = None
     test_sampler = None
     test_batch_size = args.test_bs
     eff_batch_size = args.bs // args.n_gpus
 
-    train_gold_loader = DataIterator(DataLoader(train_data_gold, batch_size=eff_batch_size, drop_last=True,
+    train_gold_loader = DataIterator(DataLoader(train_data_gold, batch_size=eff_batch_size, drop_last=True, shuffle=(gold_sampler is None),
                                                 num_workers=args.prefetch, pin_memory=True, sampler=gold_sampler))
     
-    train_silver_loader = DataLoader(train_data_silver, batch_size=eff_batch_size, drop_last=True,
+    train_silver_loader = DataLoader(train_data_silver, batch_size=eff_batch_size, drop_last=True, shuffle=(silver_sampler is None),
                                     num_workers=args.prefetch, pin_memory=True, sampler=silver_sampler)
     
     valid_loader  = DataLoader(valid_data, batch_size=test_batch_size, shuffle=(val_sampler is None),

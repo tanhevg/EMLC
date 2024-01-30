@@ -14,6 +14,10 @@ class Trainer:
                 valid_loader, test_loader, num_classes,
                 logger, injection_mode, mix_g, exp_id=None):
         self.rank = rank
+        self.device = args.device
+        self.ddp = self.device is None
+        if self.ddp:
+            self.device = self.rank
         self.args = args
         self.main_net = main_net
         self.meta_net = meta_net
@@ -53,12 +57,12 @@ class Trainer:
 
     def _training_iter(self, data_s, target_s, data_g, target_g):
         ''' Perform a single training iteration'''
-        data_g, target_g = tocuda(self.rank, data_g), tocuda(self.rank, target_g)
-        data_s, target_s = tocuda(self.rank, data_s), tocuda(self.rank, target_s)
+        data_g, target_g = tocuda(self.device, data_g), tocuda(self.device, target_g)
+        data_s, target_s = tocuda(self.device, data_s), tocuda(self.device, target_s)
 
         # bi-level optimization stage
         eta = self.main_schdlr.get_last_lr()[0]
-        kwargs = {'rank': self.rank, 'args': self.args,
+        kwargs = {'device': self.device, 'args': self.args,
                 'main_net': self.main_net, 'main_opt': self.main_opt,
                 'teacher': self.meta_net, 'teacher_opt': self.meta_opt,
                 'enhancer': self.enhancer, 'enhancer_opt': self.enhancer_opt,
@@ -71,7 +75,8 @@ class Trainer:
 
         # Update metrics
         for metric, name in zip([loss_g, loss_s, t_loss], ['loss_g', 'loss_s', 't_loss']):
-            dist.reduce(metric, dst=0)
+            if self.ddp:
+                dist.reduce(metric, dst=0)
             metric /= self.args.n_gpus
             if self.rank == 0:
                 self.writer.add_scalar(f'train/{name}', metric.item(), self.args.steps)

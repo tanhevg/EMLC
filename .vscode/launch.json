@@ -5,15 +5,33 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "EMLC cifar10 flip 0.6",
+            "name": "Cluster EMLC cifar10 flip 0.6",
             "type": "python",
             "request": "launch",
             "cwd": "${workspaceFolder}",
             "program": "main_cifar.py",
             "console": "integratedTerminal",
             "justMyCode": false,
-            "args": ["--data_path", "~/nobackup/cifar/", "--corruption_type", "flip", "--corruption_level", "0.6"],
+            "args": ["--device", "cuda", 
+                "--data_path", "~/nobackup/cifar/", 
+                "--corruption_type", "flip", 
+                "--corruption_level", "0.6"],
             // "env": { "PYTHONPATH": "${workspaceRoot}/python"}
+        },
+        {
+            "name": "Mac EMLC cifar10 flip 0.6",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "program": "main_cifar.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": ["--device", "mps", 
+                "--jvp_ad_method", "double-back-trick", 
+                "--data_path", "~/nobackup/cifar/", 
+                "--corruption_type", "flip", 
+                "--corruption_level", "0.6"],
+            "env": { "PYTORCH_ENABLE_MPS_FALLBACK": "1"}
         }
     ]
 }

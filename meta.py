@@ -6,7 +6,7 @@ import copy
 
 ########################### SINGLE STEP META #################################
 
-def teacher_backward(rank,
+def teacher_backward(device,
                     main_net, main_opt,
                     teacher, teacher_opt,
                     enhancer, enhancer_opt,
@@ -56,7 +56,7 @@ def teacher_backward(rank,
 
     # Label retaining binary loss
     retain_loss = retain_conf_loss(enhancer, t_repr_g, t_logit_g,
-                                    target_g, rank, num_classes,
+                                    target_g, device, num_classes,
                                     mode=injection_mode)
 
     # Update meta net
@@ -72,7 +72,7 @@ def teacher_backward(rank,
 
 ########################### MULTI STEP META #################################
 
-def teacher_backward_ms(rank, args,
+def teacher_backward_ms(device, args,
                         main_net, main_opt,
                         teacher, teacher_opt,
                         enhancer, enhancer_opt,
@@ -97,7 +97,7 @@ def teacher_backward_ms(rank, args,
     old_nets = []
     data_s_chunks = data_s.chunk(args.gradient_steps)
     pseudo_target_s_chunks = pseudo_target_s.chunk(args.gradient_steps)
-    loss_s = torch.zeros(1).to(rank)
+    loss_s = torch.zeros(1).to(device)
     
     for step in range(args.gradient_steps):
 
@@ -133,7 +133,7 @@ def teacher_backward_ms(rank, args,
         data_step = data_s_chunks[step]
         model_step = old_nets[step]
 
-        jvp = jacobian_vector_product(model_step, data_step, gw) # Compute jacobian vector product
+        jvp = jacobian_vector_product(model_step, data_step, gw, args.jvp_ad_method) # Compute jacobian vector product
         discounted_jvps.append(jvp.data * discount_factor)
 
         discount_factor *= gamma # Update the discount factor
@@ -147,7 +147,7 @@ def teacher_backward_ms(rank, args,
 
     # Label retaining binary loss
     retain_loss = retain_conf_loss(enhancer, t_repr_g, t_logit_g,
-                                    target_g, rank, num_classes,
+                                    target_g, device, num_classes,
                                     mode=injection_mode)
 
     # Update meta net
@@ -210,19 +210,19 @@ def meta_loss(jvp, pseudo_target_s, eta):
     meta_loss = eta * batch_dot_product.mean() # Batch dot product
     return meta_loss
 
-def retain_conf_loss(enhancer, t_repr_g, t_logit_g, target_g, rank, num_classes, mode='adversarial'):
+def retain_conf_loss(enhancer, t_repr_g, t_logit_g, target_g, device, num_classes, mode='adversarial'):
     # Label retaining binary loss
     if mode == 'random':
         target_g_fake = torch.clone(target_g)
-        target_g_fake[::2] = torch.randint_like(target_g_fake[::2], high=num_classes).to(rank)
+        target_g_fake[::2] = torch.randint_like(target_g_fake[::2], high=num_classes).to(device)
     elif mode == 'adversarial':
         top_two_preds = torch.topk(t_logit_g, 2, dim=1, sorted=True)[1]
         adversarial_labels = torch.where(top_two_preds[:,0] != target_g, top_two_preds[:,0], top_two_preds[:,1])
         target_g_fake = torch.clone(target_g)
-        target_g_fake[::2] = adversarial_labels[::2].to(rank)
+        target_g_fake[::2] = adversarial_labels[::2].to(device)
     else:
         return 0
-    target_g_mask = torch.eq(target_g_fake, target_g).type(torch.float).to(rank)
+    target_g_mask = torch.eq(target_g_fake, target_g).type(torch.float).to(device)
     retain_conf_g = enhancer(t_repr_g, target_g_fake)
     retain_conf_g = torch.clamp(retain_conf_g, min=0, max=1) # prevents floating point errors
     retain_conf_loss = F.binary_cross_entropy(retain_conf_g, target_g_mask.reshape_as(retain_conf_g))
