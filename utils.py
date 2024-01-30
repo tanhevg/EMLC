@@ -36,7 +36,7 @@ def ddp_setup(rank: int, world_size: int, runid=None):
     """
     os.environ["MASTER_ADDR"] = "localhost"
     if runid:
-        os.environ["MASTER_PORT"] = "1235" + str(runid)
+        os.environ["MASTER_PORT"] = "1235" + runid
     else:
         os.environ["MASTER_PORT"] = "1235"
     torch.backends.cudnn.benchmark = True
