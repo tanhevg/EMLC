@@ -13,6 +13,7 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "args": ["--device", "cuda", 
+                "--dataset", "cifar10",
                 "--data_path", "~/nobackup/cifar/", 
                 "--corruption_type", "flip", 
                 "--corruption_level", "0.6"],
@@ -27,8 +28,9 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "args": ["--device", "mps", 
+                "--dataset", "cifar10",
+                "--data_path", "~/data/cifar/",
                 "--jvp_ad_method", "double-back-trick", 
-                "--data_path", "~/nobackup/cifar/", 
                 "--corruption_type", "flip", 
                 "--corruption_level", "0.6"],
             "env": { "PYTORCH_ENABLE_MPS_FALLBACK": "1"}
